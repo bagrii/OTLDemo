@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="HTML + JS Task list demo">
+    <meta name="author" content="https://onethinglab.com">
+    <script src="ejs/ejs.js"></script>
+    <style type="text/css">
+      html, body {
+        height: 100%;
+      }
+      body {
+        margin: 0 auto;
+      }
+      div.mainview {
+        display: flex;
+        height: inherit;
+        justify-content: center;
+      }
+      section.tasksection {
+        flex-basis: 50%;
+        display: flex;
+        flex-direction: column;
+        background-color: #F0F8FF;
+        overflow: hidden;
+      }
+      ul.navmenu {
+        display: flex;
+        justify-content: space-around;
+        list-style: none;
+        padding-right: 5px;
+        padding-left: 5px;
+        padding-top: 5px;
+        padding-bottom: 20px;
+        margin: 0;
+        background: #F0FFFF;
+      }
+      ul.navmenu li {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      ul.tasks {
+        margin: 0;
+        padding: 0;
+        list-style-type: none;
+        overflow-y: auto;
+      }
+      ul li.task {
+        display: flex;
+      }
+      ul li span.task_status {
+        padding-top: 10px;
+        padding-left: 10px;
+        padding-right: 20px;
+        padding-bottom: 10px;
+        cursor: pointer;
+      }
+      ul li span.task_description {
+        padding: 10px;
+        flex-basis: 90%;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      ul li span.task_button {
+        padding: 10px;
+        box-sizing: border-box;
+      }
+      ul li [data-id='task_priority'] {
+        cursor: pointer;
+      }
+      ul li [data-id='task_start_pause'] {
+        cursor: pointer;
+      }
+
+      ul li [data-id='task_reset'] {
+        cursor: pointer;
+      }
+
+      ul li [data-id='task_close'] {
+        cursor: pointer;
+      }
+    </style>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+    <title>Everyday Tasks</title>
+  </head>
+  <body>
+      <a href="">Tasks example for Bootstrap vs Custom CSS</a>
+      <div class="mainview">
+        <section class="tasksection">
+          <ul class="navmenu">
+            <li><a href="#" id="menu_add_task" onclick="add_random_task();">Add Random Task</a></li>
+          </ul>
+          <ul class="tasks" id="tasks">
+          </ul>
+        </section>
+      </div>
+    <!-- template for adding new task -->
+    <script type="text/template" id="template-task">
+      <li class="task" data-task-id="<?= task_id ?>" data-task-status="<?= task_status ?>"
+          data-task-priority="<?= task_priority ?>">
+        <span class="task_status" data-id="task_status"><i class="<?= task_status_icon ?>"
+              aria-hidden="true"></i></span>
+        <span class="task_description" data-id="task_description"><?= title ?></span>
+        <span class="task_button" data-id="task_progress"><i class="<?= task_progress_icon ?>"
+              aria-hidden="true"></i></span>
+        <span class="task_button" data-id="task_priority"><i class="<?= task_priority_icon ?>" 
+              aria-hidden="true"></i></span>
+        <span class="task_button" data-id="task_start_pause"><i class="<?= task_sp_icon ?>"
+              aria-hidden="true"></i></span>
+        <span class="task_button" data-id="task_reset"><i class="fa fa-refresh fa-fw"
+              aria-hidden="true"></i></span>
+        <span class="task_button" data-id="task_pomodoros">0/<?= task_number ?></span>
+        <span class="task_button" data-id="task_close"><i class="fa fa-times fa-fw"
+              aria-hidden="true"></i></span>
+      </li>
+    </script>
+    <script type="text/javascript">
+      var TASK_STATUS = { created: "fa fa-circle-thin fa-fw",
+                          done: "fa fa-check-circle fa-fw" };
+      var TASK_PRIORITY = { normal: "fa fa-ellipsis-h fa-fw",
+                            important: "fa fa-star fa-fw",
+                            critical: "fa fa-exclamation-circle fa-fw" };
+      var TASK_SP_STATE = { start: "fa fa-play-circle-o fa-fw",
+                            pause: "fa fa-pause-circle-o fa-fw" };
+      var TASK_PROGRESS = { start: "fa fa-battery-empty fa-fw",
+                            quarter: "fa fa-battery-quarter fa-fw",
+                            half: "fa fa-battery-half fa-fw",
+                            three_quarters: "fa fa-battery-three-quarters fa-fw",
+                            done: "fa fa-battery-full fa-fw" };
+      var TASKS = document.getElementById("tasks");
+
+      function install_task_handlers() {
+        var task_handlers = {"task_status": task_status,
+                             "task_description": task_description,
+                             "task_priority": task_priority,
+                             "task_start_pause": task_start_pause,
+                             "task_reset": task_reset,
+                             "task_pomodoros": task_pomodoros,
+                             "task_close": task_close};
+
+        function on_task_click(event) {
+          var target = event.target;
+          // skip elements without id, that's just additional elements for styling
+          while(!target.hasAttribute("data-id")) {
+            target = target.parentNode;
+          }
+          // save id of clicked control for later
+          var ctrl_id = target.getAttribute("data-id");
+          // search for task id to identify with control
+          while(!target.getAttribute("data-task-id")) {
+            target = target.parentNode;
+          }
+          task_handlers[ctrl_id](target);
+        }
+        // install event handles for task list
+        document.getElementById("tasks").addEventListener("click", on_task_click);
+      }
+
+      function next_element(elements, current) {
+        var keys = Object.keys(elements);
+        i = (keys.indexOf(current) + 1) % keys.length;
+
+        return keys[i];
+      }
+
+      function task_status(task_element) {
+        var element = next_element(TASK_STATUS, task_element.getAttribute("data-task-status"))
+        var task_status = task_element.querySelector("[data-id='task_status'] > i");
+        task_status.className = TASK_STATUS[element];
+        task_element.setAttribute("data-task-status", element);
+      }
+
+      function task_description(task_element) {
+      }
+
+      function task_priority(task_element) {
+        var element = next_element(TASK_PRIORITY, task_element.getAttribute("data-task-priority"))
+        var task_priority = task_element.querySelector("[data-id='task_priority'] > i");
+        task_priority.className = TASK_PRIORITY[element];
+        task_element.setAttribute("data-task-priority", element);
+      }
+
+      function task_start_pause(task_element) {
+      }
+
+      function task_reset(task_element) {
+      }
+
+      function task_pomodoros(task_element) {
+
+      }
+      function task_close(task_element) {
+        TASKS.removeChild(task_element);
+      }
+
+      function add_task(title, priority, task_number) {
+        var template = document.getElementById("template-task").innerHTML;
+        // use custom delimiter as when running under nodejs, ejs engine treats
+        // template as server side template and trying to fill parameters and fails.
+        var html_result = ejs.compile(template, {delimiter: '?'})({title: title,
+                                                                   task_id: 0,
+                                                                   task_status: "created",
+                                                                   task_priority: priority,
+                                                                   task_status_icon: TASK_STATUS.created,
+                                                                   task_priority_icon: TASK_PRIORITY[priority],
+                                                                   task_sp_icon: TASK_SP_STATE.start,
+                                                                   task_progress_icon: "fa fa-battery-empty fa-fw",
+                                                                   task_number: task_number.toString() });
+        var tasks = document.getElementById("tasks");
+        tasks.insertAdjacentHTML("beforeend", html_result);
+      }
+
+      function add_random_task() {
+        var demo_titles = [
+          ["buy food", "normal"],
+          ["call to prolong insurance", "critical"],
+          ["read book", "important"],
+          ["charge mobile phone", "normal"]
+        ];
+
+         var demo_task = demo_titles[Math.floor(Math.random() * demo_titles.length)];
+         add_task(demo_task[0], demo_task[1], 2);
+      }
+      
+      install_task_handlers();
+    </script>
+  </body>
+</html>
